@@ -76,7 +76,7 @@ static int scull_s_release(struct inode *inode, struct file *filp)
 /*
  * The other operations for the single-open device come from the bare device
  */
-struct file_operations scull_sngl_fops = {
+static struct file_operations scull_sngl_fops = {
 	.owner =	THIS_MODULE,
 	.llseek =     	scull_llseek,
 	.read =       	scull_read,
@@ -138,7 +138,7 @@ static int scull_u_release(struct inode *inode, struct file *filp)
 /*
  * The other operations for the device come from the bare device
  */
-struct file_operations scull_user_fops = {
+static struct file_operations scull_user_fops = {
 	.owner =      THIS_MODULE,
 	.llseek =     scull_llseek,
 	.read =       scull_read,
@@ -211,7 +211,7 @@ static int scull_w_release(struct inode *inode, struct file *filp)
 /*
  * The other operations for the device come from the bare device
  */
-struct file_operations scull_wusr_fops = {
+static struct file_operations scull_wusr_fops = {
 	.owner =      THIS_MODULE,
 	.llseek =     scull_llseek,
 	.read =       scull_read,
@@ -262,7 +262,7 @@ static struct scull_dev *scull_c_lookfor_device(dev_t key)
 	memset(lptr, 0, sizeof(struct scull_listitem));
 	lptr->key = key;
 	scull_trim(&(lptr->device)); /* initialize it */
-	sema_init(&(lptr->device.sem), 1);
+	mutex_init(&(lptr->device.mutex));
 
 	/* place it in the list */
 	list_add(&lptr->list, &scull_c_list);
@@ -310,7 +310,7 @@ static int scull_c_release(struct inode *inode, struct file *filp)
 /*
  * The other operations for the device come from the bare device
  */
-struct file_operations scull_priv_fops = {
+static struct file_operations scull_priv_fops = {
 	.owner =    THIS_MODULE,
 	.llseek =   scull_llseek,
 	.read =     scull_read,
@@ -348,7 +348,7 @@ static void scull_access_setup (dev_t devno, struct scull_adev_info *devinfo)
 	/* Initialize the device structure */
 	dev->quantum = scull_quantum;
 	dev->qset = scull_qset;
-	sema_init(&dev->sem, 1);
+	mutex_init(&dev->mutex);
 
 	/* Do the cdev stuff. */
 	cdev_init(&dev->cdev, devinfo->fops);
