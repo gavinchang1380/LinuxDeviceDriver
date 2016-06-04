@@ -54,13 +54,13 @@ static int scull_s_open(struct inode *inode, struct file *filp)
 {
 	struct scull_dev *dev = &scull_s_device; /* device information */
 
-	if (! atomic_dec_and_test (&scull_s_available)) {
+	if (!atomic_dec_and_test(&scull_s_available)) {
 		atomic_inc(&scull_s_available);
 		return -EBUSY; /* already open */
 	}
 
 	/* then, everything else is copied from the bare scull device */
-	if ( (filp->f_flags & O_ACCMODE) == O_WRONLY)
+	if ((filp->f_flags & O_ACCMODE) == O_WRONLY)
 		scull_trim(dev);
 	filp->private_data = dev;
 	return 0;          /* success */
@@ -177,7 +177,7 @@ static int scull_w_open(struct inode *inode, struct file *filp)
 	while (! scull_w_available()) {
 		spin_unlock(&scull_w_lock);
 		if (filp->f_flags & O_NONBLOCK) return -EAGAIN;
-		if (wait_event_interruptible (scull_w_wait, scull_w_available()))
+		if (wait_event_interruptible(scull_w_wait, scull_w_available()))
 			return -ERESTARTSYS; /* tell the fs layer to handle it */
 		spin_lock(&scull_w_lock);
 	}
@@ -340,7 +340,7 @@ static struct scull_adev_info {
 /*
  * Set up a single device.
  */
-static void scull_access_setup (dev_t devno, struct scull_adev_info *devinfo)
+static void scull_access_setup(dev_t devno, struct scull_adev_info *devinfo)
 {
 	struct scull_dev *dev = devinfo->sculldev;
 	int err;
@@ -354,7 +354,7 @@ static void scull_access_setup (dev_t devno, struct scull_adev_info *devinfo)
 	cdev_init(&dev->cdev, devinfo->fops);
 	kobject_set_name(&dev->cdev.kobj, devinfo->name);
 	dev->cdev.owner = THIS_MODULE;
-	err = cdev_add (&dev->cdev, devno, 1);
+	err = cdev_add(&dev->cdev, devno, 1);
         /* Fail gracefully if need be */
 	if (err) {
 		printk(KERN_NOTICE "Error %d adding %s\n", err, devinfo->name);
@@ -369,7 +369,7 @@ int scull_access_init(dev_t firstdev)
 	int result, i;
 
 	/* Get our number space */
-	result = register_chrdev_region (firstdev, SCULL_N_ADEVS, "sculla");
+	result = register_chrdev_region(firstdev, SCULL_N_ADEVS, "sculla");
 	if (result < 0) {
 		printk(KERN_WARNING "sculla: device number registration failed\n");
 		return 0;
@@ -378,7 +378,7 @@ int scull_access_init(dev_t firstdev)
 
 	/* Set up each device. */
 	for (i = 0; i < SCULL_N_ADEVS; i++)
-		scull_access_setup (firstdev + i, scull_access_devs + i);
+		scull_access_setup(firstdev + i, scull_access_devs + i);
 	return SCULL_N_ADEVS;
 }
 

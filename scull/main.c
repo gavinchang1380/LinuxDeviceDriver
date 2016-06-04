@@ -177,7 +177,7 @@ static int scull_seq_show(struct seq_file *s, void *v)
 	if (mutex_lock_interruptible(&dev->mutex))
 		return -ERESTARTSYS;
 	seq_printf(s, "\nDevice %i: qset %i, q %i, sz %li\n",
-			(int) (dev - scull_devices), dev->qset,
+			(int)(dev - scull_devices), dev->qset,
 			dev->quantum, dev->size);
 	for (d = dev->data; d; d = d->next) { /* scan the list */
 		seq_printf(s, "  item at %p, qset at %p\n", d, d->data);
@@ -433,7 +433,7 @@ long scull_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
         
 	  case SCULL_IOCSQUANTUM: /* Set: arg points to the value */
-		if (! capable (CAP_SYS_ADMIN))
+		if (! capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		retval = __get_user(scull_quantum, (int __user *)arg);
 		break;
@@ -452,7 +452,7 @@ long scull_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return scull_quantum;
 
 	  case SCULL_IOCXQUANTUM: /* eXchange: use arg as pointer */
-		if (! capable (CAP_SYS_ADMIN))
+		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		tmp = scull_quantum;
 		retval = __get_user(scull_quantum, (int __user *)arg);
@@ -461,20 +461,20 @@ long scull_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 
 	  case SCULL_IOCHQUANTUM: /* sHift: like Tell + Query */
-		if (! capable (CAP_SYS_ADMIN))
+		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		tmp = scull_quantum;
 		scull_quantum = arg;
 		return tmp;
         
 	  case SCULL_IOCSQSET:
-		if (! capable (CAP_SYS_ADMIN))
+		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		retval = __get_user(scull_qset, (int __user *)arg);
 		break;
 
 	  case SCULL_IOCTQSET:
-		if (! capable (CAP_SYS_ADMIN))
+		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		scull_qset = arg;
 		break;
@@ -487,7 +487,7 @@ long scull_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return scull_qset;
 
 	  case SCULL_IOCXQSET:
-		if (! capable (CAP_SYS_ADMIN))
+		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		tmp = scull_qset;
 		retval = __get_user(scull_qset, (int __user *)arg);
@@ -496,7 +496,7 @@ long scull_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 
 	  case SCULL_IOCHQSET:
-		if (! capable (CAP_SYS_ADMIN))
+		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		tmp = scull_qset;
 		scull_qset = arg;
