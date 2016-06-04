@@ -69,17 +69,6 @@ static int scull_p_open(struct inode *inode, struct file *filp)
 
 	if (mutex_lock_interruptible(&dev->mutex))
 		return -ERESTARTSYS;
-	if (!dev->buffer) {
-		/* allocate the buffer */
-		dev->buffer = kmalloc(scull_p_buffer, GFP_KERNEL);
-		if (!dev->buffer) {
-			mutex_unlock(&dev->mutex);
-			return -ENOMEM;
-		}
-	}
-	dev->buffersize = scull_p_buffer;
-	dev->end = dev->buffer + dev->buffersize;
-	dev->rp = dev->wp = dev->buffer; /* rd and wr from the beginning */
 
 	/* use f_mode,not  f_flags: it's cleaner (fs/open.c tells why) */
 	if (filp->f_mode & FMODE_READ)
@@ -104,10 +93,6 @@ static int scull_p_release(struct inode *inode, struct file *filp)
 		dev->nreaders--;
 	if (filp->f_mode & FMODE_WRITE)
 		dev->nwriters--;
-	if (dev->nreaders + dev->nwriters == 0) {
-		kfree(dev->buffer);
-		dev->buffer = NULL; /* the other fields are not checked on open */
-	}
 	mutex_unlock(&dev->mutex);
 	return 0;
 }
@@ -166,7 +151,7 @@ static int scull_getwritespace(struct scull_pipe *dev, struct file *filp)
 		mutex_unlock(&dev->mutex);
 		if (filp->f_flags & O_NONBLOCK)
 			return -EAGAIN;
-		PDEBUG("\"%s\" writing: going to sleep\n",current->comm);
+		PDEBUG("\"%s\" writing: going to sleep\n", current->comm);
 		prepare_to_wait(&dev->outq, &wait, TASK_INTERRUPTIBLE);
 		if (spacefree(dev) == 0)
 			schedule();
@@ -177,7 +162,7 @@ static int scull_getwritespace(struct scull_pipe *dev, struct file *filp)
 			return -ERESTARTSYS;
 	}
 	return 0;
-}	
+}
 
 /* How much space is free? */
 static int spacefree(struct scull_pipe *dev)
@@ -367,6 +352,16 @@ int scull_p_init(dev_t firstdev)
 		init_waitqueue_head(&(scull_p_devices[i].inq));
 		init_waitqueue_head(&(scull_p_devices[i].outq));
 		mutex_init(&scull_p_devices[i].mutex);
+
+		/* allocate the buffer */
+		scull_p_devices[i].buffer = kmalloc(scull_p_buffer, GFP_KERNEL);
+		if (!scull_p_devices[i].buffer) {
+			return -ENOMEM;
+		}
+		scull_p_devices[i].buffersize = scull_p_buffer;
+		scull_p_devices[i].end = scull_p_devices[i].buffer + scull_p_devices[i].buffersize;
+		scull_p_devices[i].rp = scull_p_devices[i].wp = scull_p_devices[i].buffer; /* rd and wr from the beginning */
+
 		scull_p_setup_cdev(scull_p_devices + i, i);
 	}
 #ifdef SCULL_DEBUG
