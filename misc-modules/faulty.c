@@ -16,7 +16,6 @@
  */
 
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/init.h>
 
@@ -28,9 +27,9 @@
 MODULE_LICENSE("Dual BSD/GPL");
 
 
-int faulty_major = 0;
+static int faulty_major = 0;
 
-ssize_t faulty_read(struct file *filp, char __user *buf,
+static ssize_t faulty_read(struct file *filp, char __user *buf,
 		    size_t count, loff_t *pos)
 {
 	int ret;
@@ -46,7 +45,7 @@ ssize_t faulty_read(struct file *filp, char __user *buf,
 	return ret;
 }
 
-ssize_t faulty_write (struct file *filp, const char __user *buf, size_t count,
+static ssize_t faulty_write(struct file *filp, const char __user *buf, size_t count,
 		loff_t *pos)
 {
 	/* make a simple fault by dereferencing a NULL pointer */
@@ -56,14 +55,14 @@ ssize_t faulty_write (struct file *filp, const char __user *buf, size_t count,
 
 
 
-struct file_operations faulty_fops = {
+static struct file_operations faulty_fops = {
 	.read =  faulty_read,
 	.write = faulty_write,
 	.owner = THIS_MODULE
 };
 
 
-int faulty_init(void)
+static int faulty_init(void)
 {
 	int result;
 
@@ -79,7 +78,7 @@ int faulty_init(void)
 	return 0;
 }
 
-void faulty_cleanup(void)
+static void faulty_cleanup(void)
 {
 	unregister_chrdev(faulty_major, "faulty");
 }

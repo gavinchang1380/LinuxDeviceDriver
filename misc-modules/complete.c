@@ -28,18 +28,18 @@ MODULE_LICENSE("Dual BSD/GPL");
 
 static int complete_major = 0;
 
-DECLARE_COMPLETION(comp);
+static DECLARE_COMPLETION(comp);
 
-ssize_t complete_read (struct file *filp, char __user *buf, size_t count, loff_t *pos)
+static ssize_t complete_read(struct file *filp, char __user *buf, size_t count, loff_t *pos)
 {
 	printk(KERN_DEBUG "process %i (%s) going to sleep\n",
 			current->pid, current->comm);
-	wait_for_completion(&comp);
+	wait_for_completion_interruptible(&comp);
 	printk(KERN_DEBUG "awoken %i (%s)\n", current->pid, current->comm);
 	return 0; /* EOF */
 }
 
-ssize_t complete_write (struct file *filp, const char __user *buf, size_t count,
+static ssize_t complete_write(struct file *filp, const char __user *buf, size_t count,
 		loff_t *pos)
 {
 	printk(KERN_DEBUG "process %i (%s) awakening the readers...\n",
@@ -49,14 +49,14 @@ ssize_t complete_write (struct file *filp, const char __user *buf, size_t count,
 }
 
 
-struct file_operations complete_fops = {
+static struct file_operations complete_fops = {
 	.owner = THIS_MODULE,
 	.read =  complete_read,
 	.write = complete_write,
 };
 
 
-int complete_init(void)
+static int complete_init(void)
 {
 	int result;
 
@@ -71,11 +71,10 @@ int complete_init(void)
 	return 0;
 }
 
-void complete_cleanup(void)
+static void complete_cleanup(void)
 {
 	unregister_chrdev(complete_major, "complete");
 }
 
 module_init(complete_init);
 module_exit(complete_cleanup);
-
