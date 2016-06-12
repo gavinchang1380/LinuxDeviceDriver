@@ -1,6 +1,6 @@
 
 # Comment/uncomment the following line to enable/disable debugging
-#DEBUG = y
+DEBUG = y
 
 
 ifeq ($(DEBUG),y)
@@ -9,13 +9,13 @@ else
   DEBFLAGS = -O2
 endif
 
-CFLAGS += $(DEBFLAGS) -I$(LDDINC)
+ccflags-y += $(DEBFLAGS) -I$(LDDINC)
 
 TARGET = scullv
 
 ifneq ($(KERNELRELEASE),)
 
-scullv-objs := main.o mmap.o
+scullv-objs := main.o #mmap.o
 
 obj-m	:= scullv.o
 
@@ -35,7 +35,7 @@ install:
 	install -c $(TARGET).o $(INSTALLDIR)
 
 clean:
-	rm -rf *.o *~ core .depend .*.cmd *.ko *.mod.c .tmp_versions
+	rm -rf *.o *~ core .depend .*.cmd *.ko *.mod.c .tmp_versions modules.order Module.symvers
 
 
 depend .depend dep:
