@@ -29,6 +29,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/io.h>
 
 #ifdef __GLIBC__
 #  include <sys/perm.h>
@@ -38,7 +39,7 @@
 
 char *prgname;
 
-#ifdef __i386__
+#if (defined __i386__) || (defined __amd64__)
 static int write_one(unsigned int port, unsigned int val, int size)
 {
     static int iopldone = 0;
