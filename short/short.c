@@ -21,7 +21,6 @@
  * writers.
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -57,12 +56,12 @@ module_param(use_mem, int, 0);
 /* default is the first printer port on PC's. "short_base" is there too
    because it's what we want to use in the code */
 static unsigned long base = 0x378;
-unsigned long short_base = 0;
+static unsigned long short_base = 0;
 module_param(base, long, 0);
 
 /* The interrupt line is undefined by default. "short_irq" is as above */
 static int irq = -1;
-volatile int short_irq = -1;
+static volatile int short_irq = -1;
 module_param(irq, int, 0);
 
 static int probe = 0;	/* select at load time how to probe irq line */
@@ -81,14 +80,14 @@ MODULE_AUTHOR ("Alessandro Rubini");
 MODULE_LICENSE("Dual BSD/GPL");
 
 
-unsigned long short_buffer = 0;
-unsigned long volatile short_head;
-volatile unsigned long short_tail;
-DECLARE_WAIT_QUEUE_HEAD(short_queue);
+static unsigned long short_buffer = 0;
+static unsigned long volatile short_head;
+static volatile unsigned long short_tail;
+static DECLARE_WAIT_QUEUE_HEAD(short_queue);
 
 /* Set up our tasklet if we're doing that. */
 void short_do_tasklet(unsigned long);
-DECLARE_TASKLET(short_tasklet, short_do_tasklet, 0);
+static DECLARE_TASKLET(short_tasklet, short_do_tasklet, 0);
 
 /*
  * Atomicly increment an index into short_buffer
@@ -110,18 +109,16 @@ static inline void short_incr_bp(volatile unsigned long *index, int delta)
  * 00/FF on the parallel data lines. If there is a loopback wire, this
  * generates interrupts.  
  */
-
-int short_open (struct inode *inode, struct file *filp)
+static struct file_operations short_i_fops;
+static int short_open (struct inode *inode, struct file *filp)
 {
-	extern struct file_operations short_i_fops;
-
 	if (iminor (inode) & 0x80)
 		filp->f_op = &short_i_fops; /* the interrupt-driven node */
 	return 0;
 }
 
 
-int short_release (struct inode *inode, struct file *filp)
+static int short_release (struct inode *inode, struct file *filp)
 {
 	return 0;
 }
@@ -131,12 +128,12 @@ int short_release (struct inode *inode, struct file *filp)
 
 enum short_modes {SHORT_DEFAULT=0, SHORT_PAUSE, SHORT_STRING, SHORT_MEMORY};
 
-ssize_t do_short_read (struct inode *inode, struct file *filp, char __user *buf,
+static ssize_t do_short_read (struct inode *inode, struct file *filp, char __user *buf,
 		size_t count, loff_t *f_pos)
 {
 	int retval = count, minor = iminor (inode);
 	unsigned long port = short_base + (minor&0x0f);
-	void *address = (void *) short_base + (minor&0x0f);
+	void __iomem *address = (void __iomem *) short_base + (minor&0x0f);
 	int mode = (minor&0x70) >> 4;
 	unsigned char *kbuf = kmalloc(count, GFP_KERNEL), *ptr;
     
@@ -187,19 +184,19 @@ ssize_t do_short_read (struct inode *inode, struct file *filp, char __user *buf,
 /*
  * Version-specific methods for the fops structure.  FIXME don't need anymore.
  */
-ssize_t short_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
+static ssize_t short_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
 {
-	return do_short_read(filp->f_dentry->d_inode, filp, buf, count, f_pos);
+	return do_short_read(file_inode(filp), filp, buf, count, f_pos);
 }
 
 
 
-ssize_t do_short_write (struct inode *inode, struct file *filp, const char __user *buf,
+static ssize_t do_short_write (struct inode *inode, struct file *filp, const char __user *buf,
 		size_t count, loff_t *f_pos)
 {
 	int retval = count, minor = iminor(inode);
 	unsigned long port = short_base + (minor&0x0f);
-	void *address = (void *) short_base + (minor&0x0f);
+	void __iomem *address = (void __iomem *) short_base + (minor&0x0f);
 	int mode = (minor&0x70) >> 4;
 	unsigned char *kbuf = kmalloc(count, GFP_KERNEL), *ptr;
 
@@ -248,16 +245,16 @@ ssize_t do_short_write (struct inode *inode, struct file *filp, const char __use
 }
 
 
-ssize_t short_write(struct file *filp, const char __user *buf, size_t count,
+static ssize_t short_write(struct file *filp, const char __user *buf, size_t count,
 		loff_t *f_pos)
 {
-	return do_short_write(filp->f_dentry->d_inode, filp, buf, count, f_pos);
+	return do_short_write(file_inode(filp), filp, buf, count, f_pos);
 }
 
 
 
 
-unsigned int short_poll(struct file *filp, poll_table *wait)
+static unsigned int short_poll(struct file *filp, poll_table *wait)
 {
 	return POLLIN | POLLRDNORM | POLLOUT | POLLWRNORM;
 }
@@ -267,7 +264,7 @@ unsigned int short_poll(struct file *filp, poll_table *wait)
 
 
 
-struct file_operations short_fops = {
+static struct file_operations short_fops = {
 	.owner	 = THIS_MODULE,
 	.read	 = short_read,
 	.write	 = short_write,
@@ -278,7 +275,7 @@ struct file_operations short_fops = {
 
 /* then,  the interrupt-related device */
 
-ssize_t short_i_read (struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
+static ssize_t short_i_read (struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
 {
 	int count0;
 	DEFINE_WAIT(wait);
@@ -303,12 +300,12 @@ ssize_t short_i_read (struct file *filp, char __user *buf, size_t count, loff_t 
 	return count;
 }
 
-ssize_t short_i_write (struct file *filp, const char __user *buf, size_t count,
+static ssize_t short_i_write (struct file *filp, const char __user *buf, size_t count,
 		loff_t *f_pos)
 {
 	int written = 0, odd = *f_pos & 1;
 	unsigned long port = short_base; /* output to the parallel data latch */
-	void *address = (void *) short_base;
+	void __iomem *address = (void __iomem *) short_base;
 
 	if (use_mem) {
 		while (written < count)
@@ -325,7 +322,7 @@ ssize_t short_i_write (struct file *filp, const char __user *buf, size_t count,
 
 
 
-struct file_operations short_i_fops = {
+static struct file_operations short_i_fops = {
 	.owner	 = THIS_MODULE,
 	.read	 = short_i_read,
 	.write	 = short_i_write,
@@ -333,7 +330,7 @@ struct file_operations short_i_fops = {
 	.release = short_release,
 };
 
-irqreturn_t short_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+static irqreturn_t short_interrupt(int irq, void *dev_id)
 {
 	struct timeval tv;
 	int written;
@@ -356,14 +353,14 @@ irqreturn_t short_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 #define NR_TIMEVAL 512 /* length of the array of time values */
 
-struct timeval tv_data[NR_TIMEVAL]; /* too lazy to allocate it */
-volatile struct timeval *tv_head=tv_data;
-volatile struct timeval *tv_tail=tv_data;
+static struct timeval tv_data[NR_TIMEVAL]; /* too lazy to allocate it */
+static volatile struct timeval *tv_head=tv_data;
+static volatile struct timeval *tv_tail=tv_data;
 
 static struct work_struct short_wq;
 
 
-int short_wq_count = 0;
+static int short_wq_count = 0;
 
 /*
  * Increment a circular buffer pointer in a way that nobody sees
@@ -410,7 +407,7 @@ void short_do_tasklet (unsigned long unused)
 }
 
 
-irqreturn_t short_wq_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+static irqreturn_t short_wq_interrupt(int irq, void *dev_id)
 {
 	/* Grab the current time information. */
 	do_gettimeofday((struct timeval *) tv_head);
@@ -428,7 +425,7 @@ irqreturn_t short_wq_interrupt(int irq, void *dev_id, struct pt_regs *regs)
  * Tasklet top half
  */
 
-irqreturn_t short_tl_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+static irqreturn_t short_tl_interrupt(int irq, void *dev_id)
 {
 	do_gettimeofday((struct timeval *) tv_head); /* cast to stop 'volatile' warning */
 	short_incr_tv(&tv_head);
@@ -440,7 +437,7 @@ irqreturn_t short_tl_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 
 
-irqreturn_t short_sh_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+static irqreturn_t short_sh_interrupt(int irq, void *dev_id)
 {
 	int value, written;
 	struct timeval tv;
@@ -463,7 +460,7 @@ irqreturn_t short_sh_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	return IRQ_HANDLED;
 }
 
-void short_kernelprobe(void)
+static void short_kernelprobe(void)
 {
 	int count = 0;
 	do {
@@ -491,14 +488,14 @@ void short_kernelprobe(void)
 		printk("short: probe failed %i times, giving up\n", count);
 }
 
-irqreturn_t short_probing(int irq, void *dev_id, struct pt_regs *regs)
+static irqreturn_t short_probing(int irq, void *dev_id)
 {
 	if (short_irq == 0) short_irq = irq;	/* found */
 	if (short_irq != irq) short_irq = -irq; /* ambiguous */
 	return IRQ_HANDLED;
 }
 
-void short_selfprobe(void)
+static void short_selfprobe(void)
 {
 	int trials[] = {3, 5, 7, 9, 0};
 	int tried[]  = {0, 0, 0, 0, 0};
@@ -511,7 +508,7 @@ void short_selfprobe(void)
       */
 	for (i = 0; trials[i]; i++)
 		tried[i] = request_irq(trials[i], short_probing,
-				SA_INTERRUPT, "short probe", NULL);
+				0, "short probe", NULL);
 
 	do {
 		short_irq = 0; /* none got, yet */
@@ -545,7 +542,7 @@ void short_selfprobe(void)
 
 /* Finally, init and cleanup */
 
-int short_init(void)
+static int short_init(void)
 {
 	int result;
 
@@ -594,7 +591,7 @@ int short_init(void)
 	 * (unused) argument.
 	 */
 	/* this line is in short_init() */
-	INIT_WORK(&short_wq, (void (*)(void *)) short_do_tasklet, NULL);
+	INIT_WORK(&short_wq, (void (*)(struct work_struct *)) short_do_tasklet);
 
 	/*
 	 * Now we deal with the interrupt: either kernel-based
@@ -621,7 +618,7 @@ int short_init(void)
 	 */
 	if (short_irq >= 0 && share > 0) {
 		result = request_irq(short_irq, short_sh_interrupt,
-				SA_SHIRQ | SA_INTERRUPT,"short",
+				IRQF_SHARED, "short",
 				short_sh_interrupt);
 		if (result) {
 			printk(KERN_INFO "short: can't get assigned irq %i\n", short_irq);
@@ -635,7 +632,7 @@ int short_init(void)
 
 	if (short_irq >= 0) {
 		result = request_irq(short_irq, short_interrupt,
-				SA_INTERRUPT, "short", NULL);
+				0, "short", NULL);
 		if (result) {
 			printk(KERN_INFO "short: can't get assigned irq %i\n",
 					short_irq);
@@ -655,7 +652,7 @@ int short_init(void)
 		result = request_irq(short_irq,
 				tasklet ? short_tl_interrupt :
 				short_wq_interrupt,
-				SA_INTERRUPT,"short-bh", NULL);
+				0,"short-bh", NULL);
 		if (result) {
 			printk(KERN_INFO "short-bh: can't get assigned irq %i\n",
 					short_irq);
@@ -666,7 +663,7 @@ int short_init(void)
 	return 0;
 }
 
-void short_cleanup(void)
+static void short_cleanup(void)
 {
 	if (short_irq >= 0) {
 		outb(0x0, short_base + 2);   /* disable the interrupt */
