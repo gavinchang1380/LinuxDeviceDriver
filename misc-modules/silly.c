@@ -37,7 +37,7 @@
 #include <asm/io.h>
 #include <asm/uaccess.h>
 
-int silly_major = 0;
+static int silly_major = 0;
 module_param(silly_major, int, 0);
 MODULE_AUTHOR("Alessandro Rubini");
 MODULE_LICENSE("Dual BSD/GPL");
@@ -62,22 +62,22 @@ static void __iomem *io_base;
 
 
 
-int silly_open(struct inode *inode, struct file *filp)
+static int silly_open(struct inode *inode, struct file *filp)
 {
 	return 0;
 }
 
-int silly_release(struct inode *inode, struct file *filp)
+static int silly_release(struct inode *inode, struct file *filp)
 {
 	return 0;
 }
 
 enum silly_modes {M_8=0, M_16, M_32, M_memcpy};
 
-ssize_t silly_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
+static ssize_t silly_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
 {
 	int retval;
-	int mode = iminor(filp->f_dentry->d_inode);
+	int mode = iminor(file_inode(filp));
 	void __iomem *add;
 	unsigned long isa_addr = ISA_BASE + *f_pos;
 	unsigned char *kbuf, *ptr;
@@ -155,11 +155,11 @@ ssize_t silly_read(struct file *filp, char __user *buf, size_t count, loff_t *f_
 }
 
 
-ssize_t silly_write(struct file *filp, const char __user *buf, size_t count,
+static ssize_t silly_write(struct file *filp, const char __user *buf, size_t count,
 		    loff_t *f_pos)
 {
 	int retval;
-	int mode = iminor(filp->f_dentry->d_inode);
+	int mode = iminor(file_inode(filp));
 	unsigned long isa_addr = ISA_BASE + *f_pos;
 	unsigned char *kbuf, *ptr;
 	void __iomem *add;
@@ -250,13 +250,13 @@ ssize_t silly_write(struct file *filp, const char __user *buf, size_t count,
 }
 
 
-unsigned int silly_poll(struct file *filp, poll_table *wait)
+static unsigned int silly_poll(struct file *filp, poll_table *wait)
 {
     return POLLIN | POLLRDNORM | POLLOUT | POLLWRNORM;
 }
 
 
-struct file_operations silly_fops = {
+static struct file_operations silly_fops = {
 	.read =	    silly_read,
 	.write =    silly_write,
 	.poll =	    silly_poll,
@@ -265,7 +265,7 @@ struct file_operations silly_fops = {
 	.owner =    THIS_MODULE
 };
 
-int silly_init(void)
+static int silly_init(void)
 {
 	int result = register_chrdev(silly_major, "silly", &silly_fops);
 	if (result < 0) {
@@ -283,7 +283,7 @@ int silly_init(void)
 	return 0;
 }
 
-void silly_cleanup(void)
+static void silly_cleanup(void)
 {
 	iounmap(io_base);
 	unregister_chrdev(silly_major, "silly");
