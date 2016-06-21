@@ -15,7 +15,7 @@
  *
  * $Id: shortprint.c,v 1.4 2004/09/26 08:01:04 gregkh Exp $
  */
-#include <linux/config.h>
+
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 
@@ -32,7 +32,7 @@
 #include <linux/poll.h>
 
 #include <asm/io.h>
-#include <asm/semaphore.h>
+#include <linux/mutex.h>
 #include <asm/atomic.h>
 
 #include "shortprint.h"
@@ -49,7 +49,7 @@ module_param(major, int, 0);
 /* default is the first printer port on PC's. "shortp_base" is there too
    because it's what we want to use in the code */
 static unsigned long base = 0x378;
-unsigned long shortp_base = 0;
+static unsigned long shortp_base = 0;
 module_param(base, long, 0);
 
 /* The interrupt line is undefined by default. "shortp_irq" is as above */
@@ -79,7 +79,7 @@ static void shortp_timeout(unsigned long unused);
 static unsigned long shortp_in_buffer = 0;
 static unsigned long volatile shortp_in_head;
 static volatile unsigned long shortp_in_tail;
-DECLARE_WAIT_QUEUE_HEAD(shortp_in_queue);
+static DECLARE_WAIT_QUEUE_HEAD(shortp_in_queue);
 static struct timeval shortp_tv;  /* When the interrupt happened. */
 
 /*
@@ -95,25 +95,25 @@ static inline void shortp_incr_bp(volatile unsigned long *index, int delta)
 
 /*
  * On the write side we have to be more careful, since we don't want to drop
- * data.  The semaphore is used to serialize write-side access to the buffer;
+ * data.  The mutex is used to serialize write-side access to the buffer;
  * there is only one consumer, so read-side access is unregulated.  The
  * wait queue will be awakened when space becomes available in the buffer.
  */
 static unsigned char *shortp_out_buffer = NULL;
 static volatile unsigned char *shortp_out_head, *shortp_out_tail;
-static struct semaphore shortp_out_sem;
+static struct mutex shortp_out_mutex;
 static DECLARE_WAIT_QUEUE_HEAD(shortp_out_queue);
 
 /*
  * Feeding the output queue to the device is handled by way of a
  * workqueue.
  */
-static void shortp_do_work(void *);
-static DECLARE_WORK(shortp_work, shortp_do_work, NULL);
+static void shortp_do_work(struct work_struct *work);
+static DECLARE_WORK(shortp_work, shortp_do_work);
 static struct workqueue_struct *shortp_workqueue;
 
 /*
- * Available space in the output buffer; should be called with the semaphore
+ * Available space in the output buffer; should be called with the mutex
  * held.  Returns contiguous space, so caller need not worry about wraps.
  */
 static inline int shortp_out_space(void)
@@ -140,7 +140,7 @@ static inline void shortp_incr_out_bp(volatile unsigned char **bp, int incr)
  */
 static spinlock_t shortp_out_lock;
 volatile static int shortp_output_active;
-DECLARE_WAIT_QUEUE_HEAD(shortp_empty_queue); /* waked when queue empties */
+static DECLARE_WAIT_QUEUE_HEAD(shortp_empty_queue); /* waked when queue empties */
 
 /*
  * When output is active, the timer is too, in case we miss interrupts.	 Hold
@@ -274,11 +274,11 @@ static ssize_t shortp_write(struct file *filp, const char __user *buf, size_t co
 	int space, written = 0;
 	unsigned long flags;
 	/*
-	 * Take and hold the semaphore for the entire duration of the operation.  The
+	 * Take and hold the mutex for the entire duration of the operation.  The
 	 * consumer side ignores it, and it will keep other data from interleaving
 	 * with ours.
 	 */
-	if (down_interruptible(&shortp_out_sem))
+	if (mutex_lock_interruptible(&shortp_out_mutex))
 		return -ERESTARTSYS;
 	/*
 	 * Out with the data.
@@ -296,7 +296,7 @@ static ssize_t shortp_write(struct file *filp, const char __user *buf, size_t co
 		if ((space + written) > count)
 			space = count - written;
 		if (copy_from_user((char *) shortp_out_head, buf, space)) {
-			up(&shortp_out_sem);
+			mutex_unlock(&shortp_out_mutex);
 			return -EFAULT;
 		}
 		shortp_incr_out_bp(&shortp_out_head, space);
@@ -312,7 +312,7 @@ static ssize_t shortp_write(struct file *filp, const char __user *buf, size_t co
 
 out:
 	*f_pos += written;
-	up(&shortp_out_sem);
+	mutex_unlock(&shortp_out_mutex);
 	return written;
 }
 
@@ -322,7 +322,7 @@ out:
  */
 
 
-static void shortp_do_work(void *unused)
+static void shortp_do_work(struct work_struct *work)
 {
 	int written;
 	unsigned long flags;
@@ -360,7 +360,7 @@ static void shortp_do_work(void *unused)
 /*
  * The top-half interrupt handler.
  */
-static irqreturn_t shortp_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+static irqreturn_t shortp_interrupt(int irq, void *dev_id)
 {
 	if (! shortp_output_active) 
 		return IRQ_NONE;
@@ -396,7 +396,7 @@ static void shortp_timeout(unsigned long unused)
 
 	/* Otherwise we must have dropped an interrupt. */
 	spin_unlock_irqrestore(&shortp_out_lock, flags);
-	shortp_interrupt(shortp_irq, NULL, NULL);
+	shortp_interrupt(shortp_irq, NULL);
 }
     
 
@@ -456,7 +456,7 @@ static int shortp_init(void)
 	/* And the output buffer. */
 	shortp_out_buffer = (unsigned char *) __get_free_pages(GFP_KERNEL, 0);
 	shortp_out_head = shortp_out_tail = shortp_out_buffer;
-	sema_init(&shortp_out_sem, 1);
+	mutex_init(&shortp_out_mutex);
     
 	/* And the output info */
 	shortp_output_active = 0;
