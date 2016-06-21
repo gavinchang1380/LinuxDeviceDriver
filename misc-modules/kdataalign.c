@@ -14,7 +14,6 @@
  * we cannot take responsibility for errors or fitness for use.
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
@@ -25,16 +24,16 @@
  * Define several data structures, all of them start with a lone char
  * in order to present an unaligned offset for the next field
  */
-struct c   {char c;  char      t;} c;
-struct s   {char c;  short     t;} s;
-struct i   {char c;  int       t;} i;
-struct l   {char c;  long      t;} l;
-struct ll  {char c;  long long t;} ll;
-struct p   {char c;  void *    t;} p;
-struct u1b {char c;  __u8      t;} u1b;
-struct u2b {char c;  __u16     t;} u2b;
-struct u4b {char c;  __u32     t;} u4b;
-struct u8b {char c;  __u64     t;} u8b;
+static struct c   {char c;  char      t;} c;
+static struct s   {char c;  short     t;} s;
+static struct i   {char c;  int       t;} i;
+static struct l   {char c;  long      t;} l;
+static struct ll  {char c;  long long t;} ll;
+static struct p   {char c;  void *    t;} p;
+static struct u1b {char c;  __u8      t;} u1b;
+static struct u2b {char c;  __u16     t;} u2b;
+static struct u4b {char c;  __u32     t;} u4b;
+static struct u8b {char c;  __u64     t;} u8b;
 
 static void data_cleanup(void)
 {
@@ -48,7 +47,7 @@ static int data_init(void)
 		" u8 u16 u32 u64\n");
 	printk("%-12s  %3i   %3i   %3i   %3i   %3i   %3i      "
 		"%3i %3i %3i %3i\n",
-		system_utsname.machine,
+		init_utsname()->machine,
 		/* note that gcc can subtract void * values, but it's not ansi */
 		(int)((void *)(&c.t)   - (void *)&c),
 		(int)((void *)(&s.t)   - (void *)&s),
