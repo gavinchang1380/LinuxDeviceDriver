@@ -49,7 +49,6 @@ mknod /dev/${device}7s c $major 39
 
 rm -f /dev/${device}int /dev/${device}print
 mknod /dev/${device}int  c $major 128
-mknod /dev/${device}print  c $major 129
 
 chgrp $group /dev/${device}[0-7] /dev/${device}[0-7][ps] /dev/${device}int
 chmod $mode  /dev/${device}[0-7] /dev/${device}[0-7][ps] /dev/${device}int
