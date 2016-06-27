@@ -55,7 +55,6 @@ void sculld_cleanup(void);
 
 static struct ldd_driver sculld_driver = {
 	.version = "$Revision: 1.21 $",
-	.module = THIS_MODULE,
 	.driver = {
 		.name = "sculld",
 	},
@@ -539,7 +538,6 @@ static void sculld_register_dev(struct sculld_dev *dev, int index)
 {
 	sprintf(dev->devname, "sculld%d", index);
 	dev->ldev.name = dev->devname;
-	dev->ldev.driver = &sculld_driver;
 	dev_set_drvdata(&dev->ldev.dev, dev);
 	register_ldd_device(&dev->ldev);
 	device_create_file(&dev->ldev.dev, &dev_attr_dev);
