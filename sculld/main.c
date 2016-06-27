@@ -15,7 +15,6 @@
  * $Id: _main.c.in,v 1.21 2004/10/14 20:11:39 corbet Exp $
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -25,8 +24,10 @@
 #include <linux/errno.h>	/* error codes */
 #include <linux/types.h>	/* size_t */
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/fcntl.h>	/* O_ACCMODE */
 #include <linux/aio.h>
+#include <linux/mutex.h>
 #include <asm/uaccess.h>
 #include "sculld.h"		/* local definitions */
 
@@ -67,68 +68,61 @@ static struct ldd_driver sculld_driver = {
  * The proc filesystem: function to read and entry
  */
 
-void sculld_proc_offset(char *buf, char **start, off_t *offset, int *len)
-{
-	if (*offset == 0)
-		return;
-	if (*offset >= *len) {
-		/* Not there yet */
-		*offset -= *len;
-		*len = 0;
-	} else {
-		/* We're into the interesting stuff now */
-		*start = buf + *offset;
-		*offset = 0;
-	}
-}
-
 /* FIXME: Do we need this here??  It be ugly  */
-int sculld_read_procmem(char *buf, char **start, off_t offset,
-                   int count, int *eof, void *data)
+static int sculld_read_procmem(struct seq_file *m, void *v)
 {
-	int i, j, order, qset, len = 0;
-	int limit = count - 80; /* Don't print more than this */
+	int i, j, order, qset;
+	int limit = m->size - 80; /* Don't print more than this */
 	struct sculld_dev *d;
 
-	*start = buf;
 	for(i = 0; i < sculld_devs; i++) {
 		d = &sculld_devices[i];
-		if (down_interruptible (&d->sem))
+		if (mutex_lock_interruptible(&d->mutex))
 			return -ERESTARTSYS;
 		qset = d->qset;  /* retrieve the features of each device */
 		order = d->order;
-		len += sprintf(buf+len,"\nDevice %i: qset %i, order %i, sz %li\n",
+		seq_printf(m,"\nDevice %i: qset %i, order %i, sz %li\n",
 				i, qset, order, (long)(d->size));
 		for (; d; d = d->next) { /* scan the list */
-			len += sprintf(buf+len,"  item at %p, qset at %p\n",d,d->data);
-			sculld_proc_offset (buf, start, &offset, &len);
-			if (len > limit)
+			seq_printf(m,"  item at %p, qset at %p\n",d,d->data);
+			if (m->count > limit)
 				goto out;
 			if (d->data && !d->next) /* dump only the last item - save space */
 				for (j = 0; j < qset; j++) {
 					if (d->data[j])
-						len += sprintf(buf+len,"    % 4i:%8p\n",j,d->data[j]);
-					sculld_proc_offset (buf, start, &offset, &len);
-					if (len > limit)
+						seq_printf(m,"    % 4i:%8p\n",j,d->data[j]);
+					if (m->count > limit)
 						goto out;
 				}
 		}
 	  out:
-		up (&sculld_devices[i].sem);
-		if (len > limit)
+		mutex_unlock(&sculld_devices[i].mutex);
+		if (m->count > limit)
 			break;
 	}
-	*eof = 1;
-	return len;
+	return 0;
 }
 
-#endif /* SCULLD_USE_PROC */
+static int sculld_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, sculld_read_procmem, NULL);
+}
+
+static struct file_operations sculld_proc_ops = {
+	.owner = THIS_MODULE,
+	.open = sculld_proc_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release
+};
+
+#endif /* SCULLC_USE_PROC */
 
 /*
  * Open and close
  */
 
-int sculld_open (struct inode *inode, struct file *filp)
+static int sculld_open (struct inode *inode, struct file *filp)
 {
 	struct sculld_dev *dev; /* device information */
 
@@ -137,10 +131,10 @@ int sculld_open (struct inode *inode, struct file *filp)
 
     	/* now trim to 0 the length of the device if open was write-only */
 	if ( (filp->f_flags & O_ACCMODE) == O_WRONLY) {
-		if (down_interruptible (&dev->sem))
+		if (mutex_lock_interruptible(&dev->mutex))
 			return -ERESTARTSYS;
 		sculld_trim(dev); /* ignore errors */
-		up (&dev->sem);
+		mutex_unlock(&dev->mutex);
 	}
 
 	/* and use filp->private_data to point to the device data */
@@ -149,7 +143,7 @@ int sculld_open (struct inode *inode, struct file *filp)
 	return 0;          /* success */
 }
 
-int sculld_release (struct inode *inode, struct file *filp)
+static int sculld_release (struct inode *inode, struct file *filp)
 {
 	return 0;
 }
@@ -174,7 +168,7 @@ struct sculld_dev *sculld_follow(struct sculld_dev *dev, int n)
  * Data management: read and write
  */
 
-ssize_t sculld_read (struct file *filp, char __user *buf, size_t count,
+static ssize_t sculld_read (struct file *filp, char __user *buf, size_t count,
                 loff_t *f_pos)
 {
 	struct sculld_dev *dev = filp->private_data; /* the first listitem */
@@ -185,7 +179,7 @@ ssize_t sculld_read (struct file *filp, char __user *buf, size_t count,
 	int item, s_pos, q_pos, rest;
 	ssize_t retval = 0;
 
-	if (down_interruptible (&dev->sem))
+	if (mutex_lock_interruptible(&dev->mutex))
 		return -ERESTARTSYS;
 	if (*f_pos > dev->size) 
 		goto nothing;
@@ -210,19 +204,19 @@ ssize_t sculld_read (struct file *filp, char __user *buf, size_t count,
 		retval = -EFAULT;
 		goto nothing;
 	}
-	up (&dev->sem);
+	mutex_unlock(&dev->mutex);
 
 	*f_pos += count;
 	return count;
 
   nothing:
-	up (&dev->sem);
+	mutex_unlock(&dev->mutex);
 	return retval;
 }
 
 
 
-ssize_t sculld_write (struct file *filp, const char __user *buf, size_t count,
+static ssize_t sculld_write (struct file *filp, const char __user *buf, size_t count,
                 loff_t *f_pos)
 {
 	struct sculld_dev *dev = filp->private_data;
@@ -233,7 +227,7 @@ ssize_t sculld_write (struct file *filp, const char __user *buf, size_t count,
 	int item, s_pos, q_pos, rest;
 	ssize_t retval = -ENOMEM; /* our most likely error */
 
-	if (down_interruptible (&dev->sem))
+	if (mutex_lock_interruptible(&dev->mutex))
 		return -ERESTARTSYS;
 
 	/* find listitem, qset index and offset in the quantum */
@@ -268,11 +262,11 @@ ssize_t sculld_write (struct file *filp, const char __user *buf, size_t count,
     	/* update the size */
 	if (dev->size < *f_pos)
 		dev->size = *f_pos;
-	up (&dev->sem);
+	mutex_unlock(&dev->mutex);
 	return count;
 
   nomem:
-	up (&dev->sem);
+	mutex_unlock(&dev->mutex);
 	return retval;
 }
 
@@ -280,8 +274,7 @@ ssize_t sculld_write (struct file *filp, const char __user *buf, size_t count,
  * The ioctl() implementation
  */
 
-int sculld_ioctl (struct inode *inode, struct file *filp,
-                 unsigned int cmd, unsigned long arg)
+static long sculld_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 {
 
 	int err = 0, ret = 0, tmp;
@@ -375,7 +368,7 @@ int sculld_ioctl (struct inode *inode, struct file *filp,
  * The "extended" operations
  */
 
-loff_t sculld_llseek (struct file *filp, loff_t off, int whence)
+static loff_t sculld_llseek (struct file *filp, loff_t off, int whence)
 {
 	struct sculld_dev *dev = filp->private_data;
 	long newpos;
@@ -401,7 +394,7 @@ loff_t sculld_llseek (struct file *filp, loff_t off, int whence)
 	return newpos;
 }
 
-
+#if 0
 /*
  * A simple asynchronous I/O implementation.
  */
@@ -409,15 +402,15 @@ loff_t sculld_llseek (struct file *filp, loff_t off, int whence)
 struct async_work {
 	struct kiocb *iocb;
 	int result;
-	struct work_struct work;
+	struct delayed_work work;
 };
 
 /*
  * "Complete" an asynchronous operation.
  */
-static void sculld_do_deferred_op(void *p)
+static void sculld_do_deferred_op(struct work_struct *work)
 {
-	struct async_work *stuff = (struct async_work *) p;
+	struct async_work *stuff = container_of(work, struct async_work, work.work);
 	aio_complete(stuff->iocb, stuff->result, 0);
 	kfree(stuff);
 }
@@ -445,8 +438,8 @@ static int sculld_defer_op(int write, struct kiocb *iocb, char __user *buf,
 		return result; /* No memory, just complete now */
 	stuff->iocb = iocb;
 	stuff->result = result;
-	INIT_WORK(&stuff->work, sculld_do_deferred_op, stuff);
-	schedule_delayed_work(&stuff->work, HZ/100);
+	INIT_DELAYED_WORK(&stuff->work, sculld_do_deferred_op);
+	schedule_delayed_work(&stuff->work, HZ / 100);
 	return -EIOCBQUEUED;
 }
 
@@ -462,7 +455,7 @@ static ssize_t sculld_aio_write(struct kiocb *iocb, const char __user *buf,
 {
 	return sculld_defer_op(1, iocb, (char __user *) buf, count, pos);
 }
-
+#endif
 
  
 /*
@@ -480,12 +473,14 @@ struct file_operations sculld_fops = {
 	.llseek =    sculld_llseek,
 	.read =	     sculld_read,
 	.write =     sculld_write,
-	.ioctl =     sculld_ioctl,
-	.mmap =	     sculld_mmap,
+	.unlocked_ioctl =     sculld_ioctl,
+	//.mmap =	     sculld_mmap,
 	.open =	     sculld_open,
 	.release =   sculld_release,
+#if 0
 	.aio_read =  sculld_aio_read,
 	.aio_write = sculld_aio_write,
+#endif
 };
 
 int sculld_trim(struct sculld_dev *dev)
@@ -525,14 +520,13 @@ static void sculld_setup_cdev(struct sculld_dev *dev, int index)
     
 	cdev_init(&dev->cdev, &sculld_fops);
 	dev->cdev.owner = THIS_MODULE;
-	dev->cdev.ops = &sculld_fops;
-	err = cdev_add (&dev->cdev, devno, 1);
+	err = cdev_add(&dev->cdev, devno, 1);
 	/* Fail gracefully if need be */
 	if (err)
 		printk(KERN_NOTICE "Error %d adding scull%d", err, index);
 }
 
-static ssize_t sculld_show_dev(struct device *ddev, char *buf)
+static ssize_t sculld_show_dev(struct device *ddev, struct device_attribute *attr, char *buf)
 {
 	struct sculld_dev *dev = ddev->driver_data;
 
@@ -546,7 +540,7 @@ static void sculld_register_dev(struct sculld_dev *dev, int index)
 	sprintf(dev->devname, "sculld%d", index);
 	dev->ldev.name = dev->devname;
 	dev->ldev.driver = &sculld_driver;
-	dev->ldev.dev.driver_data = dev;
+	dev_set_drvdata(&dev->ldev.dev, dev);
 	register_ldd_device(&dev->ldev);
 	device_create_file(&dev->ldev.dev, &dev_attr_dev);
 }
@@ -556,7 +550,7 @@ static void sculld_register_dev(struct sculld_dev *dev, int index)
  * Finally, the module stuff
  */
 
-int sculld_init(void)
+static int sculld_init(void)
 {
 	int result, i;
 	dev_t dev = MKDEV(sculld_major, 0);
@@ -591,14 +585,14 @@ int sculld_init(void)
 	for (i = 0; i < sculld_devs; i++) {
 		sculld_devices[i].order = sculld_order;
 		sculld_devices[i].qset = sculld_qset;
-		sema_init (&sculld_devices[i].sem, 1);
+		mutex_init(&sculld_devices[i].mutex);
 		sculld_setup_cdev(sculld_devices + i, i);
 		sculld_register_dev(sculld_devices + i, i);
 	}
 
 
 #ifdef SCULLD_USE_PROC /* only when available */
-	create_proc_read_entry("sculldmem", 0, NULL, sculld_read_procmem, NULL);
+	proc_create("sculldmem", 0, NULL, &sculld_proc_ops);
 #endif
 	return 0; /* succeed */
 
