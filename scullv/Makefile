@@ -39,7 +39,7 @@ clean:
 
 
 depend .depend dep:
-	$(CC) $(CFLAGS) -M *.c > .depend
+	$(CC) $(ccflags-y) -M *.c > .depend
 
 ifeq (.depend,$(wildcard .depend))
 include .depend

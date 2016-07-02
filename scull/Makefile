@@ -2,7 +2,7 @@
 DEBUG = y
 
 
-# Add your debugging flag (or not) to CFLAGS
+# Add your debugging flag (or not) to ccflags-y
 ifeq ($(DEBUG),y)
   DEBFLAGS = -O -g -DSCULL_DEBUG # "-O" is needed to expand inlines
 else
@@ -32,10 +32,10 @@ endif
 
 
 clean:
-	rm -rf *.o *~ core .depend .*.cmd *.ko *.mod.c .tmp_versions modules.order Module.symvers
+	rm -rf *.o *~ core .depend .*.cmd *.ko *.mod.c .tmp_versions modules.order Module.symvers 
 
 depend .depend dep:
-	$(CC) $(CFLAGS) -M *.c > .depend
+	$(CC) $(ccflags-y) -M *.c > .depend
 
 
 ifeq (.depend,$(wildcard .depend))
