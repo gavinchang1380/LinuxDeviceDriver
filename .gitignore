@@ -36,3 +36,24 @@
 *.mod.*
 modules.order
 Module.symvers
+
+# Target
+asynctest
+dataalign
+datasize
+inb
+inl
+inp
+inw
+load50
+mapcmp
+mapper
+nbtest
+netifdebug
+outb
+outl
+outp
+outw
+polltest
+setconsole
+setlevel
