@@ -80,6 +80,7 @@ extern int scullp_qset;
  */
 int scullp_trim(struct scullp_dev *dev);
 struct scullp_dev *scullp_follow(struct scullp_dev *dev, int n);
+int scullp_mmap(struct file *filp, struct vm_area_struct *vma);
 
 
 #ifdef SCULLP_DEBUG

@@ -449,10 +449,6 @@ static ssize_t scullp_aio_write(struct kiocb *iocb, const char __user *buf,
 #endif
 
  
-/*
- * Mmap *is* available, but confined in a different file
- */
-extern int scullp_mmap(struct file *filp, struct vm_area_struct *vma);
 
 
 /*
@@ -465,7 +461,7 @@ struct file_operations scullp_fops = {
 	.read =	     scullp_read,
 	.write =     scullp_write,
 	.unlocked_ioctl =     scullp_ioctl,
-	//.mmap =	     scullp_mmap,
+	.mmap =	     scullp_mmap,
 	.open =	     scullp_open,
 	.release =   scullp_release,
 #if 0

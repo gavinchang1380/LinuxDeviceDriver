@@ -84,6 +84,7 @@ extern int sculld_qset;
  */
 int sculld_trim(struct sculld_dev *dev);
 struct sculld_dev *sculld_follow(struct sculld_dev *dev, int n);
+int sculld_mmap(struct file *filp, struct vm_area_struct *vma);
 
 
 #ifdef SCULLD_DEBUG

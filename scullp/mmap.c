@@ -15,12 +15,13 @@
  * $Id: _mmap.c.in,v 1.13 2004/10/18 18:07:36 corbet Exp $
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/mm.h>		/* everything */
 #include <linux/errno.h>	/* error codes */
 #include <asm/pgtable.h>
+#include <linux/mutex.h>
+#include <linux/fs.h>
 
 #include "scullp.h"		/* local definitions */
 
@@ -30,14 +31,14 @@
  * mapped, to avoid releasing it.
  */
 
-void scullp_vma_open(struct vm_area_struct *vma)
+static void scullp_vma_open(struct vm_area_struct *vma)
 {
 	struct scullp_dev *dev = vma->vm_private_data;
 
 	dev->vmas++;
 }
 
-void scullp_vma_close(struct vm_area_struct *vma)
+static void scullp_vma_close(struct vm_area_struct *vma)
 {
 	struct scullp_dev *dev = vma->vm_private_data;
 
@@ -57,16 +58,16 @@ void scullp_vma_close(struct vm_area_struct *vma)
  * is individually decreased, and would drop to 0.
  */
 
-struct page *scullp_vma_nopage(struct vm_area_struct *vma,
-                                unsigned long address, int *type)
+static int scullp_vma_nopage(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
 	unsigned long offset;
 	struct scullp_dev *ptr, *dev = vma->vm_private_data;
-	struct page *page = NOPAGE_SIGBUS;
+	struct page *page = NULL;
 	void *pageptr = NULL; /* default to "missing" */
+	int retval = VM_FAULT_NOPAGE;
 
-	down(&dev->sem);
-	offset = (address - vma->vm_start) + (vma->vm_pgoff << PAGE_SHIFT);
+	mutex_lock_interruptible(&dev->mutex);
+	offset = (unsigned long)(vmf->virtual_address - vma->vm_start) + (vma->vm_pgoff << PAGE_SHIFT);
 	if (offset >= dev->size) goto out; /* out of range */
 
 	/*
@@ -85,25 +86,26 @@ struct page *scullp_vma_nopage(struct vm_area_struct *vma,
 
 	/* got it, now increment the count */
 	get_page(page);
-	if (type)
-		*type = VM_FAULT_MINOR;
+	vmf->page = page;
+	retval = 0;
+
   out:
-	up(&dev->sem);
-	return page;
+	mutex_unlock(&dev->mutex);
+	return retval;
 }
 
 
 
-struct vm_operations_struct scullp_vm_ops = {
+static struct vm_operations_struct scullp_vm_ops = {
 	.open =     scullp_vma_open,
 	.close =    scullp_vma_close,
-	.nopage =   scullp_vma_nopage,
+	.fault =   scullp_vma_nopage,
 };
 
 
 int scullp_mmap(struct file *filp, struct vm_area_struct *vma)
 {
-	struct inode *inode = filp->f_dentry->d_inode;
+	struct inode *inode = file_inode(filp);
 
 	/* refuse to map if order is not 0 */
 	if (scullp_devices[iminor(inode)].order)
@@ -111,7 +113,6 @@ int scullp_mmap(struct file *filp, struct vm_area_struct *vma)
 
 	/* don't do anything here: "nopage" will set up page table entries */
 	vma->vm_ops = &scullp_vm_ops;
-	vma->vm_flags |= VM_RESERVED;
 	vma->vm_private_data = filp->private_data;
 	scullp_vma_open(vma);
 	return 0;

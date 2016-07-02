@@ -17,7 +17,7 @@ ifneq ($(KERNELRELEASE),)
 
 KBUILD_EXTRA_SYMBOLS := $(PWD)/../lddbus/Module.symvers
 
-sculld-objs := main.o #mmap.o
+sculld-objs := main.o mmap.o
 
 obj-m	:= sculld.o
 

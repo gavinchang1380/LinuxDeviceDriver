@@ -15,7 +15,7 @@ TARGET = scullv
 
 ifneq ($(KERNELRELEASE),)
 
-scullv-objs := main.o #mmap.o
+scullv-objs := main.o mmap.o
 
 obj-m	:= scullv.o
 
