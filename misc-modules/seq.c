@@ -92,7 +92,11 @@ static struct file_operations ct_file_ops = {
 
 static int ct_init(void)
 {
-	proc_create("sequence", 0, NULL, &ct_file_ops);
+	struct proc_dir_entry *entry;
+
+	entry = proc_create("sequence", 0, NULL, &ct_file_ops);
+	if (!entry)
+		return -ENOMEM;
 	return 0;
 }
 
